@@ -7,7 +7,6 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 )
@@ -205,10 +204,10 @@ func main() {
 	mux.HandleFunc("GET /api/v1/quotes/{quoteId}", getQuote)
 	mux.HandleFunc("GET /healthz", healthz)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8081"
-	}
+	port := "8081"
+	// if port == "" {
+	// 	port = "8081"
+	// }
 	log.Printf("quote-service listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, cors(mux)); err != nil {
 		log.Fatal(err)
