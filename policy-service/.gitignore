@@ -1,0 +1,5 @@
+# Go build output
+/policy-service
+*.exe
+*.test
+*.out

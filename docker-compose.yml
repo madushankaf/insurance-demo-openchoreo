@@ -1,0 +1,36 @@
+services:
+  quote-service:
+    build: ./quote-service
+    environment:
+      PORT: "8081"
+    ports:
+      - "8081:8081"
+
+  policy-service:
+    build: ./policy-service
+    environment:
+      PORT: "8082"
+      QUOTE_SERVICE_URL: "http://quote-service:8081"
+    ports:
+      - "8082:8082"
+    depends_on:
+      - quote-service
+
+  web-portal:
+    build: ./web-portal
+    ports:
+      - "3000:3000"
+    depends_on:
+      - quote-service
+      - policy-service
+
+  renewal-job:
+    build: ./renewal-job
+    environment:
+      POLICY_SERVICE_URL: "http://policy-service:8082"
+      RUN_ONCE: "true"
+      CRON_SCHEDULE: "0 6 * * *"
+      TIMEZONE: "America/Detroit"
+    depends_on:
+      - policy-service
+    restart: "no"
