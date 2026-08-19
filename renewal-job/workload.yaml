@@ -1,0 +1,12 @@
+# OpenChoreo Workload Descriptor
+# This file defines how your workload exposes endpoints and connects to other services.
+# It sits alongside your source code and gets converted to a Workload Custom Resource (CR).
+apiVersion: openchoreo.dev/v1alpha1
+
+# Basic metadata for the workload
+metadata:
+  # +required Name of the workload
+  name: renewal-job
+
+# This is a scheduled-task component: it runs to completion on a schedule and
+# only makes outbound HTTP calls to policy-service, so it exposes no endpoints.
