@@ -22,3 +22,5 @@ endpoints:
     # +required Type of traffic that the endpoint is accepting
     # Allowed values: GraphQL, gRPC, TCP, UDP, HTTP, Websocket
     type: HTTP
+    # +optional Path to the OpenAPI schema that describes this endpoint
+    schemaFile: openapi.yaml

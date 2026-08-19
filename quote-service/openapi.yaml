@@ -1,0 +1,138 @@
+openapi: 3.0.3
+info:
+  title: Quote Service
+  description: Term-life premium engine for AAA Life QuickTerm.
+  version: 1.0.0
+servers:
+  - url: /
+paths:
+  /api/v1/quotes:
+    post:
+      summary: Create a term-life quote
+      operationId: createQuote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteRequest"
+      responses:
+        "201":
+          description: Quote created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/quotes/{quoteId}:
+    get:
+      summary: Fetch a quote by id
+      operationId: getQuote
+      parameters:
+        - name: quoteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Quote found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "404":
+          description: Quote not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /healthz:
+    get:
+      summary: Health check
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+components:
+  schemas:
+    QuoteRequest:
+      type: object
+      required:
+        - dateOfBirth
+        - gender
+        - coverageAmount
+        - termYears
+        - tobaccoUse
+        - healthClass
+      properties:
+        dateOfBirth:
+          type: string
+          format: date
+          example: "1985-06-15"
+        gender:
+          type: string
+          enum: [M, F]
+        coverageAmount:
+          type: integer
+          description: 50,000-1,000,000 in multiples of 10,000
+          minimum: 50000
+          maximum: 1000000
+          example: 500000
+        termYears:
+          type: integer
+          enum: [10, 20, 30]
+        tobaccoUse:
+          type: boolean
+        healthClass:
+          type: string
+          enum: [PREFERRED_PLUS, PREFERRED, STANDARD, SUBSTANDARD]
+    Quote:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          example: "QTE-f52003e4c47c2ef9"
+        monthlyPremium:
+          type: number
+          format: double
+          example: 83.2
+        annualPremium:
+          type: number
+          format: double
+          example: 960
+        coverageAmount:
+          type: integer
+          example: 500000
+        termYears:
+          type: integer
+          example: 20
+        gender:
+          type: string
+          enum: [M, F]
+        healthClass:
+          type: string
+          enum: [PREFERRED_PLUS, PREFERRED, STANDARD, SUBSTANDARD]
+        expiresAt:
+          type: string
+          format: date-time
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
