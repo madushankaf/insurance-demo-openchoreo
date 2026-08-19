@@ -311,10 +311,7 @@ func main() {
 	mux.HandleFunc("PATCH /api/v1/policies/{policyId}/status", updateStatus)
 	mux.HandleFunc("GET /healthz", healthz)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8082"
-	}
+	port := "8082"
 	log.Printf("policy-service listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, cors(mux)); err != nil {
 		log.Fatal(err)
