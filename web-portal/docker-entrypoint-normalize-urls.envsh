@@ -1,0 +1,11 @@
+#!/bin/sh
+# Sourced (not executed) by the nginx entrypoint before 20-envsubst-on-templates.sh,
+# so these exports reach the template substitution.
+#
+# A trailing slash on either URL would render as `proxy_pass http://host:port//api/v1/`.
+# The `//` makes Go's http.ServeMux path-clean and reply 301, which browsers silently
+# downgrade from POST to GET — so quotes and policies would fail to be created.
+# Strip any trailing slashes so both forms of the value work.
+QUOTE_SERVICE_URL="$(printf '%s' "${QUOTE_SERVICE_URL}" | sed 's:/*$::')"
+POLICY_SERVICE_URL="$(printf '%s' "${POLICY_SERVICE_URL}" | sed 's:/*$::')"
+export QUOTE_SERVICE_URL POLICY_SERVICE_URL

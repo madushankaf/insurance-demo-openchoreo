@@ -22,3 +22,33 @@ endpoints:
     # +required Type of traffic that the endpoint is accepting
     # Allowed values: GraphQL, gRPC, TCP, UDP, HTTP, Websocket
     type: HTTP
+
+# +optional Outgoing connection details for the component
+# The portal is a browser SPA: nginx inside this container reverse-proxies
+# /api/quote/* and /api/policy/* to the URLs injected below, so the browser
+# only ever calls the portal's own origin. That means these can be
+# project-visible (private) URLs and no CORS is involved.
+connections:
+  quote-service:
+    # +required Type of the connection
+    type: api
+    # +required Parameters identifying the target endpoint
+    params:
+      # Same project, so projectName is omitted; add it for a cross-project target.
+      componentName: quote-service
+      endpoint: quotes-api
+    # +required How the resolved connection is surfaced to this workload
+    inject:
+      env:
+        - name: QUOTE_SERVICE_URL
+          value: "{{ .url }}"
+
+  policy-service:
+    type: api
+    params:
+      componentName: policy-service
+      endpoint: policies-api
+    inject:
+      env:
+        - name: POLICY_SERVICE_URL
+          value: "{{ .url }}"

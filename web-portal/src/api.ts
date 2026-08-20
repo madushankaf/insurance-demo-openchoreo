@@ -61,7 +61,7 @@ export interface QuoteInput {
 }
 
 export async function createQuote(input: QuoteInput): Promise<Quote> {
-  const res = await fetch(`${QUOTE_SERVICE_URL}/api/v1/quotes`, {
+  const res = await fetch(`${QUOTE_SERVICE_URL}/quotes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -80,7 +80,7 @@ export interface CreatePolicyInput {
 export async function createPolicy(
   input: CreatePolicyInput
 ): Promise<Policy> {
-  const res = await fetch(`${POLICY_SERVICE_URL}/api/v1/policies`, {
+  const res = await fetch(`${POLICY_SERVICE_URL}/policies`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -90,21 +90,21 @@ export async function createPolicy(
 
 export async function listPolicies(email: string): Promise<Policy[]> {
   const res = await fetch(
-    `${POLICY_SERVICE_URL}/api/v1/policies?email=${encodeURIComponent(email)}`
+    `${POLICY_SERVICE_URL}/policies?email=${encodeURIComponent(email)}`
   );
   return handle<Policy[]>(res);
 }
 
 export async function getPolicy(policyId: string): Promise<Policy> {
   const res = await fetch(
-    `${POLICY_SERVICE_URL}/api/v1/policies/${policyId}`
+    `${POLICY_SERVICE_URL}/policies/${policyId}`
   );
   return handle<Policy>(res);
 }
 
 export async function makePayment(policyId: string): Promise<Policy> {
   const res = await fetch(
-    `${POLICY_SERVICE_URL}/api/v1/policies/${policyId}/payments`,
+    `${POLICY_SERVICE_URL}/policies/${policyId}/payments`,
     { method: "POST" }
   );
   return handle<Policy>(res);

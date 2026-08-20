@@ -3,3 +3,6 @@ dist/
 dist-ssr/
 *.local
 npm-debug.log*
+
+# TypeScript incremental build info
+*.tsbuildinfo
