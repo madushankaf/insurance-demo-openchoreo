@@ -10,3 +10,21 @@ metadata:
 
 # This is a scheduled-task component: it runs to completion on a schedule and
 # only makes outbound HTTP calls to policy-service, so it exposes no endpoints.
+
+# +optional Outgoing connection details for the component
+# The job scans policies and patches their status via policy-service
+# (see POLICY_SERVICE_URL in src/renewal.ts).
+connections:
+  policy-service:
+    # +required Type of the connection
+    type: api
+    # +required Parameters identifying the target endpoint
+    params:
+      # Same project, so projectName is omitted; add it for a cross-project target.
+      componentName: policy-service
+      endpoint: policies-api
+    # +required How the resolved connection is surfaced to this workload
+    inject:
+      env:
+        - name: POLICY_SERVICE_URL
+          value: "{{ .url }}"

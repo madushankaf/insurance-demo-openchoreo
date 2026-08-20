@@ -2,51 +2,31 @@
 # Wires the portal to quote-service and policy-service at container start, so one
 # image works in every environment. Runs before nginx boots.
 #
-# Contract: pass a service BASE url with no /api/v1 and no trailing slash, e.g.
+# Contract: pass a service BASE url, no /api/v1 and no trailing slash, e.g.
 #   http://quote-service:8081
 #   http://development-default.openchoreoapis.localhost:19080/quote-service-quotes-api
 # The /api/v1 suffix is appended here, identically in both modes below.
 #
-# Two modes:
-#   browser-direct  PUBLIC_QUOTE_SERVICE_URL + PUBLIC_POLICY_SERVICE_URL set.
-#                   The browser calls the services itself, so the urls only need
-#                   to resolve from the user's machine. Use this for an external
-#                   gateway address. Requires CORS on the services (they allow *).
-#   reverse-proxy   QUOTE_SERVICE_URL + POLICY_SERVICE_URL set. nginx proxies
-#                   /api/quote/* and /api/policy/*, so the urls must resolve
-#                   from INSIDE this container -- a cluster-internal address.
+# Each service is wired independently, by this order of preference:
+#   1. PUBLIC_<X>_SERVICE_URL set  -> browser-direct: the browser calls the
+#      service itself. The url only has to resolve from the user's machine.
+#   2. <X>_SERVICE_URL resolves in this container -> reverse-proxy through nginx.
+#   3. <X>_SERVICE_URL does NOT resolve here -> browser-direct with that same
+#      url. An address this container cannot resolve but that was handed to us
+#      on purpose is almost always an external gateway url, which is precisely
+#      what the browser can reach. Proxying it would be a guaranteed 502.
+#   4. nothing set -> a 502 stub that says so.
+#
+# Browser-direct needs CORS on the service; both allow * (see cors() in main.go).
 set -e
 ME=$(basename "$0")
-log() { echo "$ME: $*"; }
+# stderr, so it never pollutes the base url that wire() echoes on stdout.
+log() { echo "$ME: $*" >&2; }
 
 CONFIG_JS=/usr/share/nginx/html/config.js
 PROXY_CONF=/etc/nginx/api-proxy.conf
 
 strip() { printf '%s' "$1" | sed 's:/*$::'; }
-QUOTE=$(strip "${QUOTE_SERVICE_URL:-}")
-POLICY=$(strip "${POLICY_SERVICE_URL:-}")
-PUB_QUOTE=$(strip "${PUBLIC_QUOTE_SERVICE_URL:-}")
-PUB_POLICY=$(strip "${PUBLIC_POLICY_SERVICE_URL:-}")
-
-if [ -n "$PUB_QUOTE" ] && [ -n "$PUB_POLICY" ]; then
-  log "browser-direct mode: the SPA will call the services directly"
-  log "  quote  -> $PUB_QUOTE/api/v1"
-  log "  policy -> $PUB_POLICY/api/v1"
-  cat > "$CONFIG_JS" <<EOF
-// Generated at container start by $ME. Do not edit.
-window.__CONFIG__ = {
-  quoteServiceUrl: "$PUB_QUOTE/api/v1",
-  policyServiceUrl: "$PUB_POLICY/api/v1",
-};
-EOF
-  echo "# browser-direct mode: no reverse proxy needed." > "$PROXY_CONF"
-  exit 0
-fi
-
-# Reverse-proxy mode: let src/config.ts fall back to the same-origin prefixes.
-echo "// Generated at container start by $ME. Reverse-proxy mode." > "$CONFIG_JS"
-echo "window.__CONFIG__ = {};" >> "$CONFIG_JS"
-: > "$PROXY_CONF"
 
 # Host part of a url, minus scheme, userinfo, port and path.
 host_of() {
@@ -56,43 +36,12 @@ host_of() {
 
 resolves() {
   case "$1" in
-    # bare IPv4/IPv6 literals need no lookup
-    *[!0-9.]*) ;;
+    *[!0-9.]*) ;;      # not a bare IPv4 literal, so look it up
     *) return 0 ;;
   esac
   getent hosts "$1" >/dev/null 2>&1 && return 0
   nslookup "$1" >/dev/null 2>&1 && return 0
   return 1
-}
-
-# Emit one proxy location, or a self-explaining 502 stub if it cannot work.
-# The stub matters: a literal hostname in proxy_pass is resolved when nginx
-# parses its config, so an unresolvable name is a fatal [emerg] that puts the
-# container in a restart loop. We'd rather boot, serve the SPA, and say why.
-emit() {
-  prefix=$1 upstream=$2 name=$3 var=$4
-  if [ -z "$upstream" ]; then
-    log "WARNING: neither $var nor PUBLIC_$var is set; $name calls will fail"
-    stub "$prefix" "$name is not configured. Set $var (cluster-internal url) or PUBLIC_$var (browser-reachable url)."
-    return
-  fi
-  h=$(host_of "$upstream")
-  if ! resolves "$h"; then
-    log "WARNING: $var host '$h' does not resolve from inside this container."
-    log "         If that is an external gateway address, set PUBLIC_$var instead"
-    log "         so the browser calls it directly. Serving a 502 stub for $prefix."
-    stub "$prefix" "Host $h does not resolve inside the portal container. If this is an external gateway address, set PUBLIC_$var instead of $var."
-    return
-  fi
-  log "proxying $prefix -> $upstream/api/v1/"
-  cat >> "$PROXY_CONF" <<EOF
-location $prefix {
-  proxy_pass $upstream/api/v1/;
-  proxy_http_version 1.1;
-  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto \$scheme;
-}
-EOF
 }
 
 stub() {
@@ -106,8 +55,57 @@ location $1 {
 EOF
 }
 
-emit /api/quote/  "$QUOTE"  "quote-service"  QUOTE_SERVICE_URL
-emit /api/policy/ "$POLICY" "policy-service" POLICY_SERVICE_URL
+# wire <prefix> <name> <var> ; echoes the browser-facing base url, or nothing
+# when the service is reverse-proxied (the SPA then uses <prefix> same-origin).
+wire() {
+  prefix=$1 name=$2 var=$3
+  internal=$(strip "$(eval "printf '%s' \"\${$var:-}\"")")
+  public=$(strip "$(eval "printf '%s' \"\${PUBLIC_$var:-}\"")")
+
+  if [ -n "$public" ]; then
+    log "$name: browser-direct via PUBLIC_$var -> $public/api/v1"
+    printf '%s' "$public/api/v1"
+    return
+  fi
+
+  if [ -z "$internal" ]; then
+    log "WARNING: $name has neither $var nor PUBLIC_$var set"
+    stub "$prefix" "$name is not configured. Set $var (reachable from the portal container) or PUBLIC_$var (reachable from the browser)."
+    return
+  fi
+
+  h=$(host_of "$internal")
+  if resolves "$h"; then
+    log "$name: reverse-proxy $prefix -> $internal/api/v1/"
+    cat >> "$PROXY_CONF" <<EOF
+location $prefix {
+  proxy_pass $internal/api/v1/;
+  proxy_http_version 1.1;
+  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$scheme;
+}
+EOF
+    return
+  fi
+
+  log "$name: host $h does not resolve in this container, so it cannot be"
+  log "  proxied. Treating $var as a browser-reachable address instead."
+  log "  $name: browser-direct -> $internal/api/v1"
+  printf '%s' "$internal/api/v1"
+}
+
+: > "$PROXY_CONF"
+QUOTE_BASE=$(wire /api/quote/  quote-service  QUOTE_SERVICE_URL)
+POLICY_BASE=$(wire /api/policy/ policy-service POLICY_SERVICE_URL)
+
+# Empty base -> src/config.ts falls back to the same-origin proxy prefix.
+{
+  echo "// Generated at container start by $ME. Do not edit."
+  echo "window.__CONFIG__ = {"
+  [ -n "$QUOTE_BASE" ]  && echo "  quoteServiceUrl: \"$QUOTE_BASE\","
+  [ -n "$POLICY_BASE" ] && echo "  policyServiceUrl: \"$POLICY_BASE\","
+  echo "};"
+} > "$CONFIG_JS"
 
 # Last resort: never let a bad generation crash-loop the container. Serving the
 # SPA with dead API routes is far easier to diagnose than CrashLoopBackOff.
