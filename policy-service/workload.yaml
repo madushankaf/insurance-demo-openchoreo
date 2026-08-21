@@ -16,6 +16,7 @@ endpoints:
     # +optional Visibility of the endpoint
     # Allowed values: project, namespace, internal, external
     visibility:
+      - project
       - external
     # +required Numeric port value that gets exposed via the endpoint
     port: 8082
@@ -24,3 +25,21 @@ endpoints:
     type: HTTP
     # +optional Path to the OpenAPI schema that describes this endpoint
     schemaFile: openapi.yaml
+
+# +optional Outgoing connection details for the component
+# policy-service calls quote-service to price a policy from a saved quote
+# (see quoteServiceURL() in main.go).
+connections:
+  quote-service:
+    # +required Type of the connection
+    type: api
+    # +required Parameters identifying the target endpoint
+    params:
+      # Same project, so projectName is omitted; add it for a cross-project target.
+      componentName: quote-service
+      endpoint: quotes-api
+    # +required How the resolved connection is surfaced to this workload
+    inject:
+      env:
+        - name: QUOTE_SERVICE_URL
+          value: "{{ .url }}"

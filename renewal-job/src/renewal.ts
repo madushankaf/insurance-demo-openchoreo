@@ -1,5 +1,11 @@
-const POLICY_SERVICE_URL =
-  process.env.POLICY_SERVICE_URL ?? "http://localhost:8082";
+// Service base url, without /api/v1 (the paths below add it). Unlike the web
+// portal this runs server-side, so it must be reachable from inside the
+// cluster -- an external gateway url will not work here.
+// A trailing slash would yield `//api/v1/...`, which Go's ServeMux answers with
+// a 301, and fetch() downgrades a redirected PATCH to GET. So strip it.
+const POLICY_SERVICE_URL = (
+  process.env.POLICY_SERVICE_URL ?? "http://localhost:8082"
+).replace(/\/+$/, "");
 
 interface Notice {
   type: string;
@@ -29,10 +35,21 @@ function daysUntil(dateStr: string, today: Date): number {
   return Math.round((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  const url = `${POLICY_SERVICE_URL}${path}`;
+  try {
+    return await fetch(url, init);
+  } catch (cause) {
+    throw new Error(
+      `cannot reach policy-service at ${url} -- check POLICY_SERVICE_URL is ` +
+        `reachable from inside this container (an external gateway url will not work)`,
+      { cause }
+    );
+  }
+}
+
 async function fetchByStatus(status: string): Promise<Policy[]> {
-  const res = await fetch(
-    `${POLICY_SERVICE_URL}/api/v1/policies?status=${status}`
-  );
+  const res = await request(`/api/v1/policies?status=${status}`);
   if (!res.ok) {
     throw new Error(`failed to fetch ${status} policies: ${res.status}`);
   }
@@ -43,14 +60,11 @@ async function patchStatus(
   policyId: string,
   body: { status: string; type: string; message: string; dueCycle: string }
 ): Promise<void> {
-  const res = await fetch(
-    `${POLICY_SERVICE_URL}/api/v1/policies/${policyId}/status`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }
-  );
+  const res = await request(`/api/v1/policies/${policyId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
     throw new Error(`failed to patch ${policyId}: ${res.status}`);
   }

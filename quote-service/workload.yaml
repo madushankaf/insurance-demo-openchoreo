@@ -16,6 +16,7 @@ endpoints:
     # +optional Visibility of the endpoint
     # Allowed values: project, namespace, internal, external
     visibility:
+      - project
       - external
     # +required Numeric port value that gets exposed via the endpoint
     port: 8081
